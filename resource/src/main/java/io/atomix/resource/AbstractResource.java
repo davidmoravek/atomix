@@ -15,10 +15,10 @@
  */
 package io.atomix.resource;
 
-import io.atomix.catalyst.serializer.Serializer;
-import io.atomix.catalyst.util.Assert;
 import io.atomix.catalyst.concurrent.Listener;
 import io.atomix.catalyst.concurrent.ThreadContext;
+import io.atomix.catalyst.serializer.Serializer;
+import io.atomix.catalyst.util.Assert;
 import io.atomix.copycat.client.CopycatClient;
 import io.atomix.resource.internal.ResourceCommand;
 import io.atomix.resource.internal.ResourceCopycatClient;
@@ -68,6 +68,10 @@ public abstract class AbstractResource<T extends Resource<T>> implements Resourc
    * Called when a client state change occurs.
    */
   private void onStateChange(CopycatClient.State state) {
+    // try to recover if transitioning from SUSPENDED to connected state
+    if (this.state == State.SUSPENDED && state == CopycatClient.State.CONNECTED) {
+      recover();
+    }
     this.state = State.valueOf(state.name());
     changeListeners.forEach(l -> l.accept(this.state));
   }
@@ -116,6 +120,15 @@ public abstract class AbstractResource<T extends Resource<T>> implements Resourc
         this.config = new Config(config);
         return (T) this;
       });
+  }
+
+  /**
+   * Recovers the resource from a broken session.
+   *
+   * @return A completable future to be completed once the resource is recovered.
+   */
+  protected CompletableFuture<Void> recover() {
+    return CompletableFuture.completedFuture(null);
   }
 
   @Override

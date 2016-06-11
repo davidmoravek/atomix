@@ -32,8 +32,11 @@ import io.atomix.resource.AbstractResource;
 import io.atomix.resource.ResourceType;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -180,6 +183,25 @@ public class MembershipGroup extends AbstractResource<DistributedGroup> implemen
         if (member == null) {
           member = new RemoteGroupMember(info, this, producerService);
           this.members.put(member.id(), member);
+        }
+      }
+    });
+  }
+
+  @Override
+  protected CompletableFuture<Void> recover() {
+    return client.submit(new GroupCommands.Listen()).thenAccept(members -> {
+      final Set<String> correct = new HashSet<>();
+      for (GroupMemberInfo info : members) {
+        correct.add(info.memberId());
+        if (!this.members.containsKey(info.memberId())) {
+          onJoinEvent(info);
+        }
+      }
+      final Set<String> diff = this.members.keySet();
+      if (diff.removeAll(correct)) {
+        for (String left : diff) {
+          onLeaveEvent(left);
         }
       }
     });
